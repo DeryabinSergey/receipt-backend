@@ -26,7 +26,7 @@ func Connect() error {
 
 	var err error
 	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Silent), // Reduce logging for Cloud Run
 	})
 
 	if err != nil {
@@ -37,8 +37,15 @@ func Connect() error {
 	return nil
 }
 
-// Migrate runs database migrations
+// Migrate runs database migrations only if needed
 func Migrate() error {
+	// Check if migration is needed by checking if users table exists and has correct structure
+	if !needsMigration() {
+		log.Println("Database schema is up to date, skipping migration")
+		return nil
+	}
+
+	log.Println("Running database migration...")
 	err := DB.AutoMigrate(&models.User{})
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
@@ -46,6 +53,32 @@ func Migrate() error {
 
 	log.Println("Database migration completed")
 	return nil
+}
+
+// needsMigration checks if database migration is needed
+func needsMigration() bool {
+	// Check if users table exists
+	if !DB.Migrator().HasTable(&models.User{}) {
+		log.Println("Users table does not exist, migration needed")
+		return true
+	}
+
+	// Check if all required columns exist
+	requiredColumns := []string{"id", "created_at", "updated_at", "deleted_at", "google_id"}
+	for _, column := range requiredColumns {
+		if !DB.Migrator().HasColumn(&models.User{}, column) {
+			log.Printf("Column %s does not exist, migration needed", column)
+			return true
+		}
+	}
+
+	// Check if google_id has unique index
+	if !DB.Migrator().HasIndex(&models.User{}, "google_id") {
+		log.Println("Google ID index does not exist, migration needed")
+		return true
+	}
+
+	return false
 }
 
 // Close closes database connection

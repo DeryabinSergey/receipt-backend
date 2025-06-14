@@ -11,6 +11,7 @@ Go backend API for receipt management application with Google OAuth authenticati
 - UUID v7 for user IDs
 - Soft delete support
 - CORS enabled
+- Optimized for Google Cloud Run
 
 ## Setup
 
@@ -69,16 +70,57 @@ go run cmd/app/main.go
 7. Backend returns JWT token to frontend
 8. Frontend uses JWT token for subsequent API calls
 
-## Deployment
+## Cloud Run Deployment
 
-### Simple deploy from source:
+The application is optimized for Google Cloud Run with:
+- Intelligent migration system that only runs when needed
+- Graceful shutdown handling
+- Optimized logging for Cloud Run
+- Proper timeout configurations
+
+### Deploy to Cloud Run
+
+1. **Simple deploy from source:**
 ```bash
-gcloud run deploy receipt-backend --region=europe-west3 --allow-unauthenticated --source .
+gcloud run deploy receipt-backend \
+  --region=europe-west3 \
+  --allow-unauthenticated \
+  --source . \
+  --set-env-vars="GIN_MODE=release"
 ```
 
-### Docker build and deploy:
+2. **Docker build and deploy:**
 ```bash
-GOOS=linux GOARCH=amd64 go build -o bin/app cmd/app/main.go 
-docker buildx build --platform linux/amd64 -t gcr.io/money-advice-462707/receipt-backend -f bin/Dockerfile .
-docker push gcr.io/money-advice-462707/receipt-backend
+# Build for linux/amd64
+docker buildx build --platform linux/amd64 -t gcr.io/YOUR_PROJECT_ID/receipt-backend .
+
+# Push to Container Registry
+docker push gcr.io/YOUR_PROJECT_ID/receipt-backend
+
+# Deploy to Cloud Run
+gcloud run deploy receipt-backend \
+  --image gcr.io/YOUR_PROJECT_ID/receipt-backend \
+  --region=europe-west3 \
+  --allow-unauthenticated
 ```
+
+### Environment Variables for Cloud Run
+
+Set these environment variables in Cloud Run:
+- `DB_HOST` - Your Cloud SQL instance connection
+- `DB_PORT` - Database port (usually 3306)
+- `DB_USER` - Database username
+- `DB_PASSWORD` - Database password
+- `DB_NAME` - Database name
+- `JWT_SECRET` - Your JWT secret key
+- `GIN_MODE` - Set to "release" for production
+
+## Migration Strategy
+
+The application uses intelligent migrations that:
+- Check if migration is actually needed before running
+- Only migrate when table structure changes
+- Skip unnecessary operations on each cold start
+- Log migration status for debugging
+
+This approach minimizes startup time in Cloud Run while ensuring database consistency.
