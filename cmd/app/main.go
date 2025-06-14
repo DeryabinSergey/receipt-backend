@@ -1,34 +1,63 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"github.com/money-advice/receipt-backend/internal/database"
+	"github.com/money-advice/receipt-backend/internal/routes"
 )
 
 func main() {
-	log.Print("starting server...")
-	http.HandleFunc("/", handler)
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
 
-	// Determine port for HTTP service.
+	// Connect to database
+	if err := database.Connect(); err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	// Run migrations
+	if err := database.Migrate(); err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+
+	// Setup Gin router
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.Default()
+
+	// Add CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
+
+	// Setup routes
+	routes.SetupRoutes(router)
+
+	// Determine port
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
-		log.Printf("defaulting to port %s", port)
 	}
 
-	// Start HTTP server.
-	log.Printf("listening on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
+	log.Printf("Starting server on port %s", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatal("Failed to start server:", err)
 	}
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	name := os.Getenv("NAME")
-	if name == "" {
-		name = "World"
-	}
-	fmt.Fprintf(w, "Hello %s!\n", name)
 }
